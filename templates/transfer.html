@@ -8,7 +8,7 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
   <div class="form-group">
-    <label>Send to (payee)</label>
+    <label for="payee_search">Find payee</label>
     {% if saved_payees %}
     <p class="muted">Choose a saved payee or search below.</p>
     <div id="saved_payees">
@@ -17,7 +17,11 @@
       {% endfor %}
     </div>
     {% endif %}
-    <input type="text" id="payee_search" placeholder="Search by name or username..." autocomplete="off" style="margin-top: 0.5rem;">
+    <p class="muted">Type a few characters (e.g. ali) and click Search or wait for results.</p>
+    <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+      <input type="text" id="payee_search" placeholder="Search by name or username..." autocomplete="off" style="flex: 1;">
+      <button type="button" id="payee_search_btn" class="btn btn-small">Search</button>
+    </div>
     <div id="payee_results" class="muted" style="margin-top: 0.25rem; font-size: 0.9rem;"></div>
     <input type="hidden" id="selected_payee_id" name="selected_payee_id" value="">
     <p id="selected_payee_label" class="muted" style="margin-top: 0.5rem;"></p>
@@ -84,31 +88,40 @@
       .catch(function() { toAccountSelect.innerHTML = '<option value="">Error loading accounts</option>'; });
   }
 
+  function doSearch() {
+    var val = payeeSearch.value.trim();
+    if (val.length < 2) { payeeResults.innerHTML = 'Type at least 2 characters'; return; }
+    clearPayee();
+    payeeResults.innerHTML = 'Searching...';
+    fetch('/api/users/search?q=' + encodeURIComponent(val))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { payeeResults.innerHTML = 'Error: ' + data.error; return; }
+        if (data.length === 0) { payeeResults.innerHTML = 'No results'; return; }
+        payeeResults.innerHTML = '';
+        data.forEach(function(u) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'payee-chip';
+          btn.textContent = u.full_name + ' (@' + u.username + ')';
+          btn.style.marginRight = '0.5rem';
+          btn.onclick = function() { setPayee(u.id, u.full_name); payeeResults.innerHTML = ''; };
+          payeeResults.appendChild(btn);
+        });
+      })
+      .catch(function() { payeeResults.innerHTML = 'Search failed'; });
+  }
+
   payeeSearch.addEventListener('input', function() {
     clearPayee();
     clearTimeout(timer);
     var val = payeeSearch.value.trim();
     if (val.length < 2) { payeeResults.innerHTML = ''; return; }
-    timer = setTimeout(function() {
-      fetch('/api/users/search?q=' + encodeURIComponent(val))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.error) { payeeResults.innerHTML = 'Error: ' + data.error; return; }
-          if (data.length === 0) { payeeResults.innerHTML = 'No results'; return; }
-          payeeResults.innerHTML = '';
-          data.forEach(function(u) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'payee-chip';
-            btn.textContent = u.full_name + ' (@' + u.username + ')';
-            btn.style.marginRight = '0.5rem';
-            btn.onclick = function() { setPayee(u.id, u.full_name); payeeResults.innerHTML = ''; };
-            payeeResults.appendChild(btn);
-          });
-        })
-        .catch(function() { payeeResults.innerHTML = 'Search failed'; });
-    }, 200);
+    timer = setTimeout(doSearch, 200);
   });
+
+  var searchBtn = document.getElementById('payee_search_btn');
+  if (searchBtn) searchBtn.addEventListener('click', doSearch);
 
   var saved = document.getElementById('saved_payees');
   if (saved) {

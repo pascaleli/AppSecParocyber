@@ -1,5 +1,5 @@
 """
-SecureBank – Demo bank application (Python + SQLite).
+ParoCyberBank – Demo bank application (Python + SQLite).
 Run: pip install -r requirements.txt && python app.py
 """
 import os
@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify, session, render_template, redirect, u
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
-DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "securebank.db")
+DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "parocyberbank.db")
 
 
 def get_db():
@@ -47,6 +47,15 @@ def init_db():
                 FOREIGN KEY (from_account_id) REFERENCES accounts(id),
                 FOREIGN KEY (to_account_id) REFERENCES accounts(id)
             );
+            CREATE TABLE IF NOT EXISTS saved_payees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                payee_user_id INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (payee_user_id) REFERENCES users(id),
+                UNIQUE(user_id, payee_user_id)
+            );
         """)
         cur = conn.execute("SELECT COUNT(*) FROM users")
         if cur.fetchone()[0] == 0:
@@ -62,7 +71,6 @@ def init_db():
                 "INSERT INTO users (username, password, full_name, email) VALUES (?, ?, ?, ?)",
                 ("charlie", "charlie789", "Charlie Admin", "charlie@bank.local"),
             )
-            # Accounts: 1=alice, 2=bob, 3=charlie (main), 4=charlie savings
             conn.execute(
                 "INSERT INTO accounts (user_id, account_number, name, balance_cents) VALUES (1, '400012340001', 'Main Checking', 150000)",
             )
@@ -159,7 +167,7 @@ def web_logout():
     return redirect(url_for("login_page"))
 
 
-# ---------- Search payees (for transfer) – SQL injection in q ----------
+# ---------- Search payees – SQL injection in q ----------
 
 @app.route("/api/users/search", methods=["GET"])
 @login_required
@@ -173,6 +181,21 @@ def api_users_search():
         return jsonify([dict(r) for r in rows])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ---------- Payee's accounts (for transfer: select destination account by payee) ----------
+
+@app.route("/api/users/<int:user_id>/accounts", methods=["GET"])
+@login_required
+def api_user_accounts(user_id):
+    """Return accounts for a user (e.g. payee) so the sender can choose which account to send to."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return jsonify([row_to_account(r) for r in rows])
 
 
 # ---------- Accounts – IDOR: no ownership check on GET /api/accounts/<id> ----------
@@ -200,11 +223,10 @@ def api_account_detail(account_id):
     conn.close()
     if not row:
         return jsonify({"error": "Account not found"}), 404
-    # Intentionally no check: row["user_id"] == session["user_id"]
     return jsonify(row_to_account(row))
 
 
-# ---------- Transactions – IDOR: account_id not checked against current user ----------
+# ---------- Transactions – IDOR: account_id not checked ----------
 
 @app.route("/api/transactions", methods=["GET"])
 @login_required
@@ -224,14 +246,36 @@ def api_transactions_list():
         (account_id, account_id),
     ).fetchall()
     conn.close()
-    # No check that account_id belongs to session["user_id"]
     out = []
     for r in rows:
         out.append(row_to_transaction(r, from_number=r["from_num"], to_number=r["to_num"]))
     return jsonify(out)
 
 
-# ---------- Transfer – IDOR: from_account_id not validated as owned by user ----------
+# ---------- All my transactions (across all my accounts) ----------
+
+@app.route("/api/transactions/all", methods=["GET"])
+@login_required
+def api_transactions_all():
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT t.id, t.from_account_id, t.to_account_id, t.amount_cents, t.memo, t.created_at,
+                  a_from.account_number AS from_num, a_to.account_number AS to_num
+           FROM transactions t
+           JOIN accounts a_from ON a_from.id = t.from_account_id
+           JOIN accounts a_to ON a_to.id = t.to_account_id
+           JOIN accounts my_acc ON (my_acc.id = t.from_account_id OR my_acc.id = t.to_account_id) AND my_acc.user_id = ?
+           ORDER BY t.created_at DESC LIMIT 100""",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        out.append(row_to_transaction(r, from_number=r["from_num"], to_number=r["to_num"]))
+    return jsonify(out)
+
+
+# ---------- Transfer – IDOR: from_account_id not validated ----------
 
 @app.route("/api/transfer", methods=["POST"])
 @login_required
@@ -257,7 +301,6 @@ def api_transfer():
         conn.close()
         return jsonify({"error": "Insufficient balance"}), 400
 
-    # Intentionally no check: from_row["user_id"] == session["user_id"]
     now = datetime.utcnow().isoformat() + "Z"
     conn.execute(
         "UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?",
@@ -276,6 +319,63 @@ def api_transfer():
     return jsonify({"ok": True, "message": "Transfer completed"})
 
 
+# ---------- Saved payees ----------
+
+@app.route("/api/payees", methods=["GET"])
+@login_required
+def api_payees_list():
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT sp.id, sp.payee_user_id, sp.label, u.username, u.full_name
+           FROM saved_payees sp
+           JOIN users u ON u.id = sp.payee_user_id
+           WHERE sp.user_id = ?
+           ORDER BY sp.label""",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    return jsonify([{"id": r["id"], "payee_user_id": r["payee_user_id"], "label": r["label"], "username": r["username"], "full_name": r["full_name"]} for r in rows])
+
+
+@app.route("/api/payees", methods=["POST"])
+@login_required
+def api_payees_add():
+    data = request.get_json(force=True, silent=True) or {}
+    payee_user_id = data.get("payee_user_id", type=int)
+    label = (data.get("label") or "").strip()[:200]
+    if not payee_user_id or not label:
+        return jsonify({"error": "payee_user_id and label required"}), 400
+    if payee_user_id == session["user_id"]:
+        return jsonify({"error": "Cannot add yourself"}), 400
+    conn = get_db()
+    exists = conn.execute("SELECT id FROM users WHERE id = ?", (payee_user_id,)).fetchone()
+    if not exists:
+        conn.close()
+        return jsonify({"error": "User not found"}), 404
+    try:
+        conn.execute(
+            "INSERT INTO saved_payees (user_id, payee_user_id, label) VALUES (?, ?, ?)",
+            (session["user_id"], payee_user_id, label),
+        )
+        conn.commit()
+        rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return jsonify({"ok": True, "id": rid})
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Payee already saved"}), 400
+
+
+@app.route("/api/payees/<int:payee_id>", methods=["DELETE"])
+@login_required
+def api_payees_delete(payee_id):
+    conn = get_db()
+    conn.execute("DELETE FROM saved_payees WHERE id = ? AND user_id = ?", (payee_id, session["user_id"]))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
 # ---------- Web UI ----------
 
 @app.route("/login", methods=["GET", "POST"])
@@ -288,7 +388,7 @@ def login_page():
         return render_template("login.html", error="Username required")
     conn = get_db()
     row = conn.execute(
-        "SELECT id, username, password, full_name FROM users WHERE username = ?",
+        "SELECT id, username, password, full_name, email FROM users WHERE username = ?",
         (username,),
     ).fetchone()
     conn.close()
@@ -296,6 +396,7 @@ def login_page():
         session["user_id"] = row["id"]
         session["username"] = row["username"]
         session["full_name"] = row["full_name"]
+        session["email"] = row["email"] or ""
         return redirect("/dashboard")
     return render_template("login.html", error="Invalid credentials")
 
@@ -316,6 +417,61 @@ def dashboard():
     )
 
 
+@app.route("/profile")
+@login_required
+def profile_page():
+    conn = get_db()
+    row = conn.execute(
+        "SELECT username, full_name, email FROM users WHERE id = ?",
+        (session["user_id"],),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return redirect("/dashboard")
+    return render_template(
+        "profile.html",
+        username=row["username"],
+        full_name=row["full_name"],
+        email=row["email"] or "",
+    )
+
+
+@app.route("/transactions")
+@login_required
+def transactions_page():
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT t.id, t.from_account_id, t.to_account_id, t.amount_cents, t.memo, t.created_at,
+                  a_from.account_number AS from_num, a_to.account_number AS to_num
+           FROM transactions t
+           JOIN accounts a_from ON a_from.id = t.from_account_id
+           JOIN accounts a_to ON a_to.id = t.to_account_id
+           JOIN accounts my_acc ON (my_acc.id = t.from_account_id OR my_acc.id = t.to_account_id) AND my_acc.user_id = ?
+           ORDER BY t.created_at DESC LIMIT 100""",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    transactions = [row_to_transaction(r, from_number=r["from_num"], to_number=r["to_num"]) for r in rows]
+    return render_template("transactions.html", transactions=transactions)
+
+
+@app.route("/payees")
+@login_required
+def payees_page():
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT sp.id, sp.payee_user_id, sp.label, u.username, u.full_name
+           FROM saved_payees sp
+           JOIN users u ON u.id = sp.payee_user_id
+           WHERE sp.user_id = ?
+           ORDER BY sp.label""",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    payees = [{"id": r["id"], "payee_user_id": r["payee_user_id"], "label": r["label"], "username": r["username"], "full_name": r["full_name"]} for r in rows]
+    return render_template("payees.html", payees=payees)
+
+
 @app.route("/accounts/<int:account_id>")
 @login_required
 def account_page(account_id):
@@ -327,7 +483,6 @@ def account_page(account_id):
     if not row:
         conn.close()
         return "Account not found", 404
-    # IDOR: no ownership check
     tx_rows = conn.execute(
         """SELECT t.id, t.from_account_id, t.to_account_id, t.amount_cents, t.memo, t.created_at,
                   a_from.account_number AS from_num, a_to.account_number AS to_num
@@ -356,28 +511,42 @@ def transfer_page():
             "SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?",
             (session["user_id"],),
         ).fetchall()
+        payees = conn.execute(
+            """SELECT sp.payee_user_id, sp.label, u.username, u.full_name
+               FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id
+               WHERE sp.user_id = ? ORDER BY sp.label""",
+            (session["user_id"],),
+        ).fetchall()
         conn.close()
         return render_template(
             "transfer.html",
             accounts=[row_to_account(r) for r in accounts],
+            saved_payees=[dict(r) for r in payees],
         )
     from_id = request.form.get("from_account_id", type=int)
     to_id = request.form.get("to_account_id", type=int)
     amount = request.form.get("amount", type=float)
     memo = (request.form.get("memo") or "")[:500]
     if not from_id or not to_id or amount is None or amount <= 0:
-        return render_template("transfer.html", error="Invalid form data")
+        conn = get_db()
+        accounts = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
+        payees = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
+        conn.close()
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in accounts], saved_payees=[dict(r) for r in payees], error="Invalid form data")
     amount_cents = int(round(amount * 100))
     conn = get_db()
     from_row = conn.execute("SELECT id, user_id, balance_cents FROM accounts WHERE id = ?", (from_id,)).fetchone()
     to_row = conn.execute("SELECT id FROM accounts WHERE id = ?", (to_id,)).fetchone()
     if not from_row or not to_row:
+        acc = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
+        pay = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
         conn.close()
-        return render_template("transfer.html", error="Account not found")
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], error="Account not found")
     if from_row["balance_cents"] < amount_cents:
+        acc = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
+        pay = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
         conn.close()
-        return render_template("transfer.html", error="Insufficient balance")
-    # IDOR: no ownership check on from_account_id
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], error="Insufficient balance")
     now = datetime.utcnow().isoformat() + "Z"
     conn.execute("UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?", (amount_cents, from_id))
     conn.execute("UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?", (amount_cents, to_id))
@@ -390,14 +559,17 @@ def transfer_page():
     return redirect("/dashboard")
 
 
+@app.route("/help")
+def help_page():
+    return render_template("help.html")
+
+
 @app.route("/")
 def index():
     if "user_id" in session:
         return redirect("/dashboard")
     return render_template("login.html")
 
-
-# ---------- Health ----------
 
 @app.route("/api/health")
 def health():

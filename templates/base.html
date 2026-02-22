@@ -78,16 +78,16 @@
 <body>
   {% block body %}
   <header class="header">
-    <a href="/" class="brand">ParoCyberBank</a>
+    <a href="{{ url_for('index') }}" class="brand">ParoCyberBank</a>
     {% if session.get('user_id') %}
     <nav class="nav">
-      <a href="/dashboard">Dashboard</a>
-      <a href="/transfer">Transfer</a>
-      <a href="/transactions">Transactions</a>
-      <a href="/payees">Payees</a>
-      <a href="/profile">Profile</a>
-      <a href="/help">Help</a>
-      <form action="/logout" method="post" style="display:inline;">
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('transfer_page') }}">Transfer</a>
+      <a href="{{ url_for('transactions_page') }}">Transactions</a>
+      <a href="{{ url_for('payees_page') }}">Payees</a>
+      <a href="{{ url_for('profile_page') }}">Profile</a>
+      <a href="{{ url_for('help_page') }}">Help</a>
+      <form action="{{ url_for('web_logout') }}" method="post" style="display:inline;">
         <button type="submit" class="btn btn-secondary btn-small">Log out</button>
       </form>
     </nav>
