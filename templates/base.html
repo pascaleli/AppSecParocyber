@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SecureBank{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --card: #fff;
+      --primary: #1a365d;
+      --primary-light: #2c5282;
+      --text: #2d3748;
+      --text-muted: #718096;
+      --border: #e2e8f0;
+      --success: #276749;
+      --error: #c53030;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .header {
+      background: var(--primary);
+      color: #fff;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header a { color: #fff; text-decoration: none; }
+    .header a:hover { text-decoration: underline; }
+    .brand { font-weight: 700; font-size: 1.25rem; }
+    .main { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { margin: 0 0 1rem; font-size: 1.1rem; color: var(--primary); }
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.95rem;
+    }
+    .btn:hover { background: var(--primary-light); }
+    .btn-secondary { background: var(--text-muted); }
+    .btn-secondary:hover { background: #4a5568; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: var(--text); }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    .error { color: var(--error); margin-bottom: 1rem; }
+    .muted { color: var(--text-muted); font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { font-weight: 600; color: var(--text-muted); font-size: 0.85rem; }
+    {% block extra_css %}{% endblock %}
+  </style>
+</head>
+<body>
+  {% block body %}
+  <header class="header">
+    <a href="/" class="brand">SecureBank</a>
+    {% if session.get('user_id') %}
+    <nav>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/transfer">Transfer</a>
+      <form action="/logout" method="post" style="display:inline; margin-left: 1rem;">
+        <button type="submit" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">Log out</button>
+      </form>
+    </nav>
+    {% endif %}
+  </header>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+  {% endblock %}
+</body>
+</html>

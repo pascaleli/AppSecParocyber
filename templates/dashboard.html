@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – SecureBank{% endblock %}
+{% block content %}
+<h1 style="margin: 0 0 1.5rem;">Welcome, {{ full_name }}</h1>
+
+<div class="card">
+  <h2>Your accounts</h2>
+  {% if accounts %}
+  <table>
+    <thead>
+      <tr>
+        <th>Account</th>
+        <th>Number</th>
+        <th>Balance</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in accounts %}
+      <tr>
+        <td>{{ a.name }}</td>
+        <td class="muted">****{{ a.account_number[-4:] }}</td>
+        <td><strong>${{ a.balance }}</strong></td>
+        <td><a href="/accounts/{{ a.id }}" class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No accounts.</p>
+  {% endif %}
+  <p style="margin-top: 1rem;"><a href="/transfer" class="btn">New transfer</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Account – SecureBank{% endblock %}
+{% block content %}
+<p style="margin-bottom: 1rem;"><a href="/dashboard" class="btn btn-secondary">← Dashboard</a></p>
+
+<div class="card">
+  <h2>{{ account.name }}</h2>
+  <p class="muted">Account number ****{{ account.account_number[-4:] }}</p>
+  <p style="font-size: 1.5rem; margin: 0.5rem 0;"><strong>${{ account.balance }}</strong></p>
+</div>
+
+<div class="card">
+  <h2>Recent transactions</h2>
+  {% if transactions %}
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>From / To</th>
+        <th>Amount</th>
+        <th>Memo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in transactions %}
+      <tr>
+        <td class="muted">{{ t.created_at[:10] }}</td>
+        <td>****{{ t.from_account_number[-4:] }} → ****{{ t.to_account_number[-4:] }}</td>
+        <td>${{ t.amount }}</td>
+        <td>{{ t.memo or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No transactions yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
