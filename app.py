@@ -517,11 +517,30 @@ def transfer_page():
                WHERE sp.user_id = ? ORDER BY sp.label""",
             (session["user_id"],),
         ).fetchall()
+        recipient_accounts = conn.execute(
+            """SELECT a.id, a.account_number, a.name, a.balance_cents, u.full_name
+               FROM accounts a
+               JOIN users u ON u.id = a.user_id
+               WHERE a.user_id != ?
+               ORDER BY u.full_name, a.name""",
+            (session["user_id"],),
+        ).fetchall()
         conn.close()
+        recipients = [
+            {
+                "id": r["id"],
+                "full_name": r["full_name"],
+                "name": r["name"],
+                "account_number": r["account_number"],
+                "balance": f"{r['balance_cents'] / 100:.2f}",
+            }
+            for r in recipient_accounts
+        ]
         return render_template(
             "transfer.html",
             accounts=[row_to_account(r) for r in accounts],
             saved_payees=[dict(r) for r in payees],
+            recipient_accounts=recipients,
         )
     from_id = request.form.get("from_account_id", type=int)
     to_id = request.form.get("to_account_id", type=int)
@@ -531,8 +550,10 @@ def transfer_page():
         conn = get_db()
         accounts = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
         payees = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
+        recipient_accounts = conn.execute("""SELECT a.id, a.account_number, a.name, a.balance_cents, u.full_name FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.user_id != ? ORDER BY u.full_name, a.name""", (session["user_id"],)).fetchall()
         conn.close()
-        return render_template("transfer.html", accounts=[row_to_account(r) for r in accounts], saved_payees=[dict(r) for r in payees], error="Invalid form data")
+        recipients = [{"id": r["id"], "full_name": r["full_name"], "name": r["name"], "account_number": r["account_number"], "balance": f"{r['balance_cents'] / 100:.2f}"} for r in recipient_accounts]
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in accounts], saved_payees=[dict(r) for r in payees], recipient_accounts=recipients, error="Invalid form data")
     amount_cents = int(round(amount * 100))
     conn = get_db()
     from_row = conn.execute("SELECT id, user_id, balance_cents FROM accounts WHERE id = ?", (from_id,)).fetchone()
@@ -540,13 +561,17 @@ def transfer_page():
     if not from_row or not to_row:
         acc = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
         pay = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
+        r_rows = conn.execute("""SELECT a.id, a.account_number, a.name, a.balance_cents, u.full_name FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.user_id != ? ORDER BY u.full_name, a.name""", (session["user_id"],)).fetchall()
+        recipients = [{"id": r["id"], "full_name": r["full_name"], "name": r["name"], "account_number": r["account_number"], "balance": f"{r['balance_cents'] / 100:.2f}"} for r in r_rows]
         conn.close()
-        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], error="Account not found")
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], recipient_accounts=recipients, error="Account not found")
     if from_row["balance_cents"] < amount_cents:
         acc = conn.execute("SELECT id, account_number, name, balance_cents FROM accounts WHERE user_id = ?", (session["user_id"],)).fetchall()
         pay = conn.execute("""SELECT sp.payee_user_id, sp.label, u.username, u.full_name FROM saved_payees sp JOIN users u ON u.id = sp.payee_user_id WHERE sp.user_id = ? ORDER BY sp.label""", (session["user_id"],)).fetchall()
+        r_rows = conn.execute("""SELECT a.id, a.account_number, a.name, a.balance_cents, u.full_name FROM accounts a JOIN users u ON u.id = a.user_id WHERE a.user_id != ? ORDER BY u.full_name, a.name""", (session["user_id"],)).fetchall()
+        recipients = [{"id": r["id"], "full_name": r["full_name"], "name": r["name"], "account_number": r["account_number"], "balance": f"{r['balance_cents'] / 100:.2f}"} for r in r_rows]
         conn.close()
-        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], error="Insufficient balance")
+        return render_template("transfer.html", accounts=[row_to_account(r) for r in acc], saved_payees=[dict(r) for r in pay], recipient_accounts=recipients, error="Insufficient balance")
     now = datetime.utcnow().isoformat() + "Z"
     conn.execute("UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?", (amount_cents, from_id))
     conn.execute("UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?", (amount_cents, to_id))
