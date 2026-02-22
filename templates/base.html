@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}SecureBank{% endblock %}</title>
+  <title>{% block title %}ParoCyberBank{% endblock %}</title>
   <style>
     :root {
       --bg: #f5f6fa;
@@ -25,10 +25,13 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
     .header a { color: #fff; text-decoration: none; }
     .header a:hover { text-decoration: underline; }
     .brand { font-weight: 700; font-size: 1.25rem; }
+    .nav { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .main { max-width: 900px; margin: 0 auto; padding: 2rem; }
     .card {
       background: var(--card);
@@ -52,6 +55,7 @@
     .btn:hover { background: var(--primary-light); }
     .btn-secondary { background: var(--text-muted); }
     .btn-secondary:hover { background: #4a5568; }
+    .btn-small { padding: 0.35rem 0.75rem; font-size: 0.85rem; }
     .form-group { margin-bottom: 1rem; }
     .form-group label { display: block; margin-bottom: 0.25rem; font-weight: 500; color: var(--text); }
     .form-group input, .form-group select, .form-group textarea {
@@ -66,19 +70,25 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
     th { font-weight: 600; color: var(--text-muted); font-size: 0.85rem; }
+    .payee-chip { display: inline-block; margin: 0.25rem; padding: 0.35rem 0.75rem; background: var(--border); border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    .payee-chip:hover { background: #cbd5e0; }
     {% block extra_css %}{% endblock %}
   </style>
 </head>
 <body>
   {% block body %}
   <header class="header">
-    <a href="/" class="brand">SecureBank</a>
+    <a href="/" class="brand">ParoCyberBank</a>
     {% if session.get('user_id') %}
-    <nav>
+    <nav class="nav">
       <a href="/dashboard">Dashboard</a>
       <a href="/transfer">Transfer</a>
-      <form action="/logout" method="post" style="display:inline; margin-left: 1rem;">
-        <button type="submit" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">Log out</button>
+      <a href="/transactions">Transactions</a>
+      <a href="/payees">Payees</a>
+      <a href="/profile">Profile</a>
+      <a href="/help">Help</a>
+      <form action="/logout" method="post" style="display:inline;">
+        <button type="submit" class="btn btn-secondary btn-small">Log out</button>
       </form>
     </nav>
     {% endif %}

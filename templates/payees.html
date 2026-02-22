@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Payees – ParoCyberBank{% endblock %}
+{% block content %}
+<p style="margin-bottom: 1rem;"><a href="/dashboard" class="btn btn-secondary">← Dashboard</a></p>
+
+<div class="card">
+  <h2>Saved payees</h2>
+  <p class="muted">Quick-select these when making a transfer.</p>
+  {% if payees %}
+  <table>
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Name</th>
+        <th>Username</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in payees %}
+      <tr>
+        <td>{{ p.label }}</td>
+        <td>{{ p.full_name }}</td>
+        <td class="muted">@{{ p.username }}</td>
+        <td>
+          <button type="button" class="btn btn-secondary btn-small remove-payee" data-id="{{ p.id }}">Remove</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No saved payees. Add one when making a transfer, or search below.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Add payee</h2>
+  <div class="form-group">
+    <label for="add_search">Search by name or username</label>
+    <input type="text" id="add_search" placeholder="Type to search...">
+    <div id="add_results" class="muted" style="margin-top: 0.25rem;"></div>
+  </div>
+  <div class="form-group" id="add_label_group" style="display: none;">
+    <label for="add_label">Label for this payee</label>
+    <input type="text" id="add_label" placeholder="e.g. Bob - rent">
+    <button type="button" class="btn btn-small" id="add_btn">Add payee</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var addSearch = document.getElementById('add_search');
+  var addResults = document.getElementById('add_results');
+  var addLabelGroup = document.getElementById('add_label_group');
+  var addLabel = document.getElementById('add_label');
+  var addBtn = document.getElementById('add_btn');
+  var selectedUser = null;
+  var timer;
+
+  addSearch.addEventListener('input', function() {
+    addLabelGroup.style.display = 'none';
+    selectedUser = null;
+    clearTimeout(timer);
+    var val = addSearch.value.trim();
+    if (val.length < 2) { addResults.innerHTML = ''; return; }
+    timer = setTimeout(function() {
+      fetch('/api/users/search?q=' + encodeURIComponent(val))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) { addResults.innerHTML = 'Error'; return; }
+          if (data.length === 0) { addResults.innerHTML = 'No results'; return; }
+          addResults.innerHTML = '';
+          data.forEach(function(u) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'payee-chip';
+            btn.textContent = u.full_name + ' (@' + u.username + ')';
+            btn.onclick = function() {
+              selectedUser = u;
+              addLabel.value = u.full_name;
+              addLabelGroup.style.display = 'block';
+            };
+            addResults.appendChild(btn);
+          });
+        });
+    }, 200);
+  });
+
+  addBtn.addEventListener('click', function() {
+    if (!selectedUser || !addLabel.value.trim()) return;
+    fetch('/api/payees', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payee_user_id: selectedUser.id, label: addLabel.value.trim() })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) alert(data.error);
+        else window.location.reload();
+      });
+  });
+
+  document.querySelectorAll('.remove-payee').forEach(function(btn) {
+    btn.onclick = function() {
+      if (!confirm('Remove this payee?')) return;
+      var id = btn.getAttribute('data-id');
+      fetch('/api/payees/' + id, { method: 'DELETE' })
+        .then(function() { window.location.reload(); });
+    };
+  });
+})();
+</script>
+{% endblock %}

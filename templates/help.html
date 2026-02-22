@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Help – ParoCyberBank{% endblock %}
+{% block content %}
+<p style="margin-bottom: 1rem;"><a href="/dashboard" class="btn btn-secondary">← Dashboard</a></p>
+
+<div class="card">
+  <h2>How to make a transfer</h2>
+  <ol>
+    <li>Go to <strong>Transfer</strong>.</li>
+    <li>Search for the person you want to send money to (by name or username), or click a saved payee.</li>
+    <li>Choose <strong>To account</strong> from the list (their account(s) will appear—e.g. “Main Checking ****4002”).</li>
+    <li>Select <strong>From account</strong> (your account), enter the amount and optional memo, then click <strong>Send transfer</strong>.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Saved payees</h2>
+  <p>On the <strong>Payees</strong> page you can add people you send money to often. They will appear as quick-select chips on the Transfer page. You can also add a payee when searching during a transfer.</p>
+</div>
+
+<div class="card">
+  <h2>Transactions</h2>
+  <p><strong>Dashboard</strong> shows your accounts. Click <strong>View</strong> on an account to see its transactions, or go to <strong>Transactions</strong> to see all activity across your accounts.</p>
+</div>
+
+<div class="card">
+  <h2>Contact</h2>
+  <p>For support, contact your lab instructor or refer to the course materials.</p>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard – SecureBank{% endblock %}
+{% block title %}Dashboard – ParoCyberBank{% endblock %}
 {% block content %}
 <h1 style="margin: 0 0 1.5rem;">Welcome, {{ full_name }}</h1>
 
@@ -21,7 +21,7 @@
         <td>{{ a.name }}</td>
         <td class="muted">****{{ a.account_number[-4:] }}</td>
         <td><strong>${{ a.balance }}</strong></td>
-        <td><a href="/accounts/{{ a.id }}" class="btn" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">View</a></td>
+        <td><a href="/accounts/{{ a.id }}" class="btn btn-small">View</a></td>
       </tr>
       {% endfor %}
     </tbody>

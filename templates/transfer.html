@@ -1,30 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Transfer – SecureBank{% endblock %}
+{% block title %}Transfer – ParoCyberBank{% endblock %}
 {% block content %}
 <p style="margin-bottom: 1rem;"><a href="/dashboard" class="btn btn-secondary">← Dashboard</a></p>
 
 <div class="card">
   <h2>New transfer</h2>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <form method="post" action="/transfer">
+
+  <div class="form-group">
+    <label>Send to (payee)</label>
+    {% if saved_payees %}
+    <p class="muted">Choose a saved payee or search below.</p>
+    <div id="saved_payees">
+      {% for p in saved_payees %}
+      <span class="payee-chip" data-user-id="{{ p.payee_user_id }}" data-label="{{ p.label }}">{{ p.label }} ({{ p.full_name }})</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <input type="text" id="payee_search" placeholder="Search by name or username..." autocomplete="off" style="margin-top: 0.5rem;">
+    <div id="payee_results" class="muted" style="margin-top: 0.25rem; font-size: 0.9rem;"></div>
+    <input type="hidden" id="selected_payee_id" name="selected_payee_id" value="">
+    <p id="selected_payee_label" class="muted" style="margin-top: 0.5rem;"></p>
+  </div>
+
+  <form method="post" action="/transfer" id="transfer_form">
     <div class="form-group">
       <label for="from_account_id">From account</label>
       <select id="from_account_id" name="from_account_id" required>
-        <option value="">Select account</option>
+        <option value="">Select your account</option>
         {% for a in accounts %}
-        <option value="{{ a.id }}">{{ a.name }} (****{{ a.account_number[-4:] }}) – ${{ a.balance }}</option>
+        <option value="{{ a.id }}">{{ a.name }} ****{{ a.account_number[-4:] }} – ${{ a.balance }}</option>
         {% endfor %}
       </select>
     </div>
     <div class="form-group">
-      <label for="payee_search">Find payee (by name or username)</label>
-      <input type="text" id="payee_search" placeholder="Type to search..." autocomplete="off">
-      <div id="payee_results" class="muted" style="margin-top: 0.25rem; font-size: 0.9rem;"></div>
-    </div>
-    <div class="form-group">
-      <label for="to_account_id">To account ID</label>
-      <input type="number" id="to_account_id" name="to_account_id" placeholder="e.g. 2" required min="1">
-      <span class="muted">Select a payee above or enter destination account ID.</span>
+      <label for="to_account_id">To account</label>
+      <select id="to_account_id" name="to_account_id" required>
+        <option value="">First search or select a payee above</option>
+      </select>
+      <span class="muted">Pick the destination account (payee may have several).</span>
     </div>
     <div class="form-group">
       <label for="amount">Amount ($)</label>
@@ -37,29 +51,73 @@
     <button type="submit" class="btn">Send transfer</button>
   </form>
 </div>
+
 <script>
 (function() {
-  var q = document.getElementById('payee_search');
-  var out = document.getElementById('payee_results');
-  var toId = document.getElementById('to_account_id');
+  var payeeSearch = document.getElementById('payee_search');
+  var payeeResults = document.getElementById('payee_results');
+  var selectedPayeeId = document.getElementById('selected_payee_id');
+  var selectedPayeeLabel = document.getElementById('selected_payee_label');
+  var toAccountSelect = document.getElementById('to_account_id');
   var timer;
-  q.addEventListener('input', function() {
+
+  function clearPayee() {
+    selectedPayeeId.value = '';
+    selectedPayeeLabel.textContent = '';
+    toAccountSelect.innerHTML = '<option value="">First search or select a payee above</option>';
+  }
+
+  function setPayee(userId, label) {
+    selectedPayeeId.value = userId;
+    selectedPayeeLabel.textContent = 'Sending to: ' + label;
+    fetch('/api/users/' + userId + '/accounts')
+      .then(function(r) { return r.json(); })
+      .then(function(accounts) {
+        toAccountSelect.innerHTML = '<option value="">Select account</option>';
+        accounts.forEach(function(a) {
+          var opt = document.createElement('option');
+          opt.value = a.id;
+          opt.textContent = a.name + ' ****' + a.account_number.slice(-4) + ' – $' + a.balance;
+          toAccountSelect.appendChild(opt);
+        });
+      })
+      .catch(function() { toAccountSelect.innerHTML = '<option value="">Error loading accounts</option>'; });
+  }
+
+  payeeSearch.addEventListener('input', function() {
+    clearPayee();
     clearTimeout(timer);
-    var val = q.value.trim();
-    if (val.length < 2) { out.textContent = ''; return; }
+    var val = payeeSearch.value.trim();
+    if (val.length < 2) { payeeResults.innerHTML = ''; return; }
     timer = setTimeout(function() {
       fetch('/api/users/search?q=' + encodeURIComponent(val))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          if (data.error) { out.innerHTML = 'Error: ' + data.error; return; }
-          if (data.length === 0) { out.textContent = 'No results'; return; }
-          out.innerHTML = 'Users: ' + data.map(function(u) {
-            return u.full_name + ' (@' + u.username + ', id ' + u.id + ')';
-          }).join('; ');
+          if (data.error) { payeeResults.innerHTML = 'Error: ' + data.error; return; }
+          if (data.length === 0) { payeeResults.innerHTML = 'No results'; return; }
+          payeeResults.innerHTML = '';
+          data.forEach(function(u) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'payee-chip';
+            btn.textContent = u.full_name + ' (@' + u.username + ')';
+            btn.style.marginRight = '0.5rem';
+            btn.onclick = function() { setPayee(u.id, u.full_name); payeeResults.innerHTML = ''; };
+            payeeResults.appendChild(btn);
+          });
         })
-        .catch(function() { out.textContent = 'Search failed'; });
+        .catch(function() { payeeResults.innerHTML = 'Search failed'; });
     }, 200);
   });
+
+  var saved = document.getElementById('saved_payees');
+  if (saved) {
+    saved.querySelectorAll('.payee-chip').forEach(function(chip) {
+      chip.onclick = function() {
+        setPayee(chip.getAttribute('data-user-id'), chip.getAttribute('data-label'));
+      };
+    });
+  }
 })();
 </script>
 {% endblock %}

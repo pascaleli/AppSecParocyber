@@ -1,16 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Account – ParoCyberBank{% endblock %}
+{% block title %}Transactions – ParoCyberBank{% endblock %}
 {% block content %}
 <p style="margin-bottom: 1rem;"><a href="/dashboard" class="btn btn-secondary">← Dashboard</a></p>
 
 <div class="card">
-  <h2>{{ account.name }}</h2>
-  <p class="muted">Account number ****{{ account.account_number[-4:] }}</p>
-  <p style="font-size: 1.5rem; margin: 0.5rem 0;"><strong>${{ account.balance }}</strong></p>
-</div>
-
-<div class="card">
-  <h2>Recent transactions</h2>
+  <h2>All transactions</h2>
+  <p class="muted">Transactions across all your accounts.</p>
   {% if transactions %}
   <table>
     <thead>
@@ -35,6 +30,5 @@
   {% else %}
   <p class="muted">No transactions yet.</p>
   {% endif %}
-  <p class="muted"><a href="/transactions">View all transactions</a></p>
 </div>
 {% endblock %}
