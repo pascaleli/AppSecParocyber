@@ -436,19 +436,22 @@ def profile_page():
     )
 
 
+# Transactions page: only show transactions from or to the current user's accounts
+# (so IDOR at GET /api/transactions?account_id=<id> is testable in Burp by tampering with account_id)
 @app.route("/transactions")
 @login_required
 def transactions_page():
     conn = get_db()
     rows = conn.execute(
-        """SELECT t.id, t.from_account_id, t.to_account_id, t.amount_cents, t.memo, t.created_at,
+        """SELECT DISTINCT t.id, t.from_account_id, t.to_account_id, t.amount_cents, t.memo, t.created_at,
                   a_from.account_number AS from_num, a_to.account_number AS to_num
            FROM transactions t
            JOIN accounts a_from ON a_from.id = t.from_account_id
            JOIN accounts a_to ON a_to.id = t.to_account_id
-           JOIN accounts my_acc ON (my_acc.id = t.from_account_id OR my_acc.id = t.to_account_id) AND my_acc.user_id = ?
+           WHERE (t.from_account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+                  OR t.to_account_id IN (SELECT id FROM accounts WHERE user_id = ?))
            ORDER BY t.created_at DESC LIMIT 100""",
-        (session["user_id"],),
+        (session["user_id"], session["user_id"]),
     ).fetchall()
     conn.close()
     transactions = [row_to_transaction(r, from_number=r["from_num"], to_number=r["to_num"]) for r in rows]
